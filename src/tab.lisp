@@ -1,4 +1,11 @@
 
+(defparameter *page-width* 612)
+(defparameter *page-height* 792)
+(defparameter *page-margin-left* 16)
+(defparameter *page-margin-right* 16)
+(defparameter *page-margin-top* 24)
+(defparameter *page-margin-bottom* 16)
+
 ;; Falls of Richmond
 (defvar falls-of-richmond
   '(( ( ( - - ) - - ( 0 - ) ) ( - ( - - ) ( - - - ) ( - - ) ) )
@@ -61,6 +68,14 @@
 
 ;;(layout (transpose falls-of-richmond))
 
+(defstruct rect top left width height)
+
+(defun rect-with (r &key top left width height)
+  (make-rect :top (or top (rect-top r))
+	     :left (or left (rect-left r))
+	     :width (or width (rect-width r))
+	     :height (or height (rect-height r))))
+
 (defun measure-box (measure)
   (hbox (mapcar #'chord-box measure)))
 
@@ -68,50 +83,66 @@
   (hbox (mapcar #'measure-box staff)))
 
 (defun render-frontmatter ()
-  (format t "%!PS
+  (format *ps-output* "%!PS
 /Palatino-Roman 11.000000 selectfont
 1.000000 setlinewidth
-16.000000 776.000000 moveto"))
+"))
+;16.000000 776.000000 moveto
+;"))
 
-(defun gsave () (format t "gsave~%"))
-(defun grestore () (format t "grestore~%"))
-(defun moveto (x y) (format t "~a ~a moveto~%" x y))
-(defun translate (x y) (format t "~a ~a translate~%" x y))
+(defun render-hbox (box r)
+  (let ((left (rect-left r)))
+    (dolist (child (box-contents box))
+      (let ((child-width (box-width child)))
+	(render child (rect-with r :left left :width child-width))
+	(incf left (* child-width 16)))))
+  box)
 
-(defmacro with-gsave (&body body)
-  `(progn
-     (gsave)
-     (unwind-protect
-	  (progn ,@body)
-       (grestore))))
+(defun render-vbox (box r)
+  (let ((top (rect-top r)))
+    (dolist (child (box-contents box))
+      (let ((child-height (box-height child)))
+	(render child (rect-with r :top top :height child-height))
+	(incf top (* child-height (- 16))))))
+  box)
 
-(defun render-hbox (box)
-  (with-gsave
-      (do* ((c (box-contents box) (cdr c)))
-	   ((null c) box)
-	(let* ((b (car c)) (w (box-width b)))
-	  (render b)
-	  (translate w 0)))))  
+(defun render-text (box r)
+  (format *ps-output* "~a ~a moveto~%" (rect-left r) (rect-top r))
+  (format *ps-output* "(~a) show~%" (box-contents box))
+  box)
 
-(defun render-vbox (box)
-  (with-gsave
-      (do* ((c (box-contents box) (cdr c)))
-	   ((null c) box)
-	(let* ((b (car c)) (h (box-height b)))
-	  (render b)
-	  (translate 0 h)))))
-
-(defun render-text (box)
-  (prog1 box (format t "(~a) show~%" (box-contents box))))
-
-(defun render (box)
+(defun render (box r)
   (case (box-type box)
-    (:hbox (render-hbox box))
-    (:vbox (render-vbox box))
-    (:text (render-text box))))
-  
+    (:hbox (render-hbox box r))
+    (:vbox (render-vbox box r))
+    (:text (render-text box r))))
+
+(defun page-rect ()
+  (make-rect :top (- *page-height* *page-margin-top*)
+	     :left *page-margin-left*
+	     :width (- *page-width* *page-margin-left* *page-margin-right*)
+	     :height (- *page-height* *page-margin-top* *page-margin-bottom*)))
+
 (defun main ()
-  (render (layout (transpose falls-of-richmond)))
+  (render-frontmatter)
+  (render (layout (transpose falls-of-richmond)) (page-rect))
+  (format *ps-output* "showpage~%")
+  (finish-output *ps-output*)
   t)
 
 (main)
+;;
+
+(defun define-tabstaff ()
+  (defps tabstaff () "
+    % width
+    /w exch def
+
+    0 1 4 {
+        /i exch def
+        newpath
+        0 i 12 mul moveto
+        w i 12 mul lineto
+        stroke
+    } for"))
+
