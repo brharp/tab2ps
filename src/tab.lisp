@@ -61,10 +61,20 @@
 	    :height 1
 	    :contents string))
 
+(defun staff (content)
+  (make-box :type :staff
+	    :width (box-width content)
+	    :height (box-height content)
+	    :contents content))
+
 (defun layout (tab)
   (if (matrixp tab)
       (hbox (mapcar #'layout tab))
       (vbox (mapcar #'text tab))))
+
+(defun layout-staff (tab)
+  (staff (layout tab)))
+	    
 
 ;;(layout (transpose falls-of-richmond))
 
@@ -85,10 +95,8 @@
 (defun render-frontmatter ()
   (format *ps-output* "%!PS
 /Palatino-Roman 11.000000 selectfont
-1.000000 setlinewidth
+0.500000 setlinewidth
 "))
-;16.000000 776.000000 moveto
-;"))
 
 (defun render-hbox (box r)
   (let* ((left (rect-left r))
@@ -113,11 +121,23 @@
   (format *ps-output* "(~a) show~%" (box-contents box))
   box)
 
+(defun render-staff (box r)
+  (dotimes (i 5)
+    (let* ((x1 (rect-left r))
+	   (x2 (+ x1 (rect-width r)))
+	   (y  (- (rect-top r) (* 16 i))))
+      (newpath)
+      (moveto x1 y)
+      (lineto x2 y)
+      (stroke)))
+  (render (box-contents box) r))
+
 (defun render (box r)
   (case (box-type box)
     (:hbox (render-hbox box r))
     (:vbox (render-vbox box r))
-    (:text (render-text box r))))
+    (:text (render-text box r))
+    (:staff (render-staff box r))))
 
 (defun page-rect ()
   (make-rect :top (- *page-height* *page-margin-top*)
@@ -125,25 +145,14 @@
 	     :width (- *page-width* *page-margin-left* *page-margin-right*)
 	     :height (- *page-height* *page-margin-top* *page-margin-bottom*)))
 
-(defun main ()
+(defun render-score ()
   (render-frontmatter)
-  (render (layout (transpose falls-of-richmond)) (page-rect))
-  (showpage)
+  (render (layout-staff (transpose falls-of-richmond)) (page-rect))
+  (showpage))
+
+(defun main ()
+  (with-ps (render-score)
+    (y-or-n-p))
   t)
 
-(main)
 ;;
-
-(defun define-tabstaff ()
-  (defps tabstaff () "
-    % width
-    /w exch def
-
-    0 1 4 {
-        /i exch def
-        newpath
-        0 i 12 mul moveto
-        w i 12 mul lineto
-        stroke
-    } for"))
-
