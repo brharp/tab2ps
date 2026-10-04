@@ -91,11 +91,13 @@
 ;"))
 
 (defun render-hbox (box r)
-  (let ((left (rect-left r)))
-    (dolist (child (box-contents box))
-      (let ((child-width (box-width child)))
-	(render child (rect-with r :left left :width child-width))
-	(incf left (* child-width 16)))))
+  (let* ((left (rect-left r))
+	 (children (box-contents box))
+	 (child-count (length children))
+	 (child-width (floor (/ (rect-width r) child-count))))
+    (dolist (child children)
+      (render child (rect-with r :left left :width child-width))
+      (incf left child-width)))
   box)
 
 (defun render-vbox (box r)
@@ -126,8 +128,7 @@
 (defun main ()
   (render-frontmatter)
   (render (layout (transpose falls-of-richmond)) (page-rect))
-  (format *ps-output* "showpage~%")
-  (finish-output *ps-output*)
+  (showpage)
   t)
 
 (main)
