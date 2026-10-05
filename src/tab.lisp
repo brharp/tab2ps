@@ -95,7 +95,7 @@
 (defun render-frontmatter ()
   (format *ps-output* "%!PS
 /Palatino-Roman 11.000000 selectfont
-0.500000 setlinewidth
+1.000000 setlinewidth
 "))
 
 (defun render-hbox (box r)
