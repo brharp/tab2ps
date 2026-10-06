@@ -90,7 +90,7 @@
   (make-box :type :text
 	    :width 1
 	    :height 1
-	    :contents string))
+	    :contents (tab-text string)))
 
 ;; staff - renders a staff line
 (defun staff (content)
@@ -104,6 +104,10 @@
 ;; boxes. Matrices are converted to horizontal boxes.
 ;; When we get to the level of a list, it is converted
 ;; into a vertical list of text boxes.
+
+(defun tab-text (content)
+  (if (eq content '-) ""
+      (format nil "~a" content)))
 
 (defun layout (tab)
   (if (matrixp tab)
@@ -120,15 +124,19 @@
 
 ;; Boxes are rendered to a scene graph of drawing objects.
 
-(defstruct line (x1 y1 x2 y2))
+(defstruct line x1 y1 x2 y2)
 
-(defstruct text (x y string))
+(defstruct text x y string)
 
 
 ;; Rendering
 
+;; Render boxes to a scene graph. Boxes are provided
+;; with a rect into which they can render.
+
 (defstruct rect top left width height)
 
+;; rect-with - copy rect and modify attributes
 (defun rect-with (r &key top left width height)
   (make-rect :top (or top (rect-top r))
 	     :left (or left (rect-left r))
@@ -150,38 +158,41 @@
 "))
 
 (defun render-hbox (box r)
-  (let* ((left (rect-left r))
-	 (children (box-contents box))
-	 (child-count (length children))
-	 (child-width (floor (/ (rect-width r) child-count))))
-    (dolist (child children)
-      (render child (rect-with r :left left :width child-width))
-      (incf left child-width)))
-  box)
+  (do* ((left (rect-left r) (+ left child-width))
+	(children (box-contents box) (cdr children))
+	(child-count (length children))
+	(child-width (floor (/ (rect-width r) child-count)))
+	(child (car children) (car children))
+	(g nil))
+       ((null children) (reverse g))
+    (push (render child (rect-with r :left left :width child-width)) g)))
+
+(defun render-vertical-list (boxes r)
+  (when boxes
+    (let* ((box (car boxes))
+	   (height (* 16 (box-height box)))
+	   (bottom (- (rect-top r) height))
+	   (rheight (rect-height r))
+	   (height2 (- rheight height))
+	   (r1 (rect-with r :height height))
+	   (r2 (rect-with r :top bottom :height height2)))
+      (cons (render box r1)
+	    (render-vertical-list (rest boxes) r2)))))
 
 (defun render-vbox (box r)
-  (let ((top (rect-top r)))
-    (dolist (child (box-contents box))
-      (let ((child-height (box-height child)))
-	(render child (rect-with r :top top :height child-height))
-	(incf top (* child-height (- 16))))))
-  box)
+  (render-vertical-list (box-contents box) r))
 
 (defun render-text (box r)
-  (format *ps-output* "~a ~a moveto~%" (rect-left r) (rect-top r))
-  (format *ps-output* "(~a) show~%" (box-contents box))
-  box)
+  (make-text :x (rect-left r) :y (rect-top r) :string (box-contents box)))
 
 (defun render-staff (box r)
-  (dotimes (i 5)
-    (let* ((x1 (rect-left r))
-	   (x2 (+ x1 (rect-width r)))
-	   (y  (- (rect-top r) (* 16 i))))
-      (newpath)
-      (moveto x1 y)
-      (lineto x2 y)
-      (stroke)))
-  (render (box-contents box) r))
+  (let ((g nil))
+    (dotimes (i 5)
+      (let* ((x1 (rect-left r))
+	     (x2 (+ x1 (rect-width r)))
+	     (y  (- (rect-top r) (* 16 i))))
+	(push (make-line :x1 x1 :y1 y :x2 x2 :y2 y) g)))
+    (reverse (cons (render (box-contents box) r) g))))
 
 (defun render (box r)
   (case (box-type box)
@@ -196,14 +207,27 @@
 	     :width (- *page-width* *page-margin-left* *page-margin-right*)
 	     :height (- *page-height* *page-margin-top* *page-margin-bottom*)))
 
+;; Scene drawing
+
+(defun draw (g)
+  (cond ((consp g) (mapc #'draw g))
+	((line-p g) (progn (newpath)
+			   (moveto (line-x1 g) (line-y1 g))
+			   (lineto (line-x2 g) (line-y2 g))
+			   (stroke)))
+	((text-p g) (progn (moveto (text-x g) (text-y g))
+			   (show (text-string g))))))
+
+
 (defun render-score ()
   (render-frontmatter)
-  (render (layout-staff (transpose falls-of-richmond)) (page-rect))
+  (draw (render (layout-staff (transpose falls-of-richmond)) (page-rect)))
   (showpage))
 
 (defun main ()
   (with-ps (render-score)
     (y-or-n-p))
   t)
+
 
 ;;
