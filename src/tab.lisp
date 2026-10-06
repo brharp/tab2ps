@@ -6,6 +6,12 @@
 (defparameter *page-margin-top* 24)
 (defparameter *page-margin-bottom* 16)
 
+;; Tab matrix format - tab is arranged as a list of measures.
+;; Each measure consists of n lists, one per string.
+;; Each line is subdivided by number of beats, sub-beats, etc.
+;; A line divided in half is two half notees.
+;; Four divisions are quarter notes, setc.
+
 ;; Falls of Richmond
 (defvar falls-of-richmond
   '(( ( ( - - ) - - ( 0 - ) ) ( - ( - - ) ( - - - ) ( - - ) ) )
@@ -14,15 +20,30 @@
     ( ( ( 0 3 ) - - ( - - ) ) ( 3 ( - - ) ( - - - ) ( 3 0 ) ) )
     ( ( ( - - ) - - ( - 0 ) ) ( - ( - - ) ( - - - ) ( - - ) ) )))
 
+;; Rendering and layout is much easier if we transpose the matrix
+;; so each note in a chord are aligned in a list.  Essentially we
+;; want to transform from row order to column order.
+
+;; Before transposing a matrix we need a predicate to determine
+;; if an object is a matrix. We define a matrix as a list where
+;; every element is a list. A better version would assert that
+;; each row of the matrix has the same number of columns.
+
 (defun matrixp (matrix)
   (and (listp matrix)
        (every #'listp matrix)))
+
+;; To transpose a matrix, we add the first element of each
+;; row to a list, and concatenate this with the transposition
+;; of the remaining lists.
 
 (defun transpose-1 (tab)
   (cond ((null tab) ())
 	((some #'null tab) ())
 	(t (cons (mapcar #'car tab)
 		 (transpose-1 (mapcar #'cdr tab))))))
+
+;; Fully transpose a matrix.
 
 (defun transpose (tab)
   (if (not (matrixp tab)) tab
@@ -32,10 +53,17 @@
 
 ;; Transposing the staff gives us a list of measures
 ;; Transposing a measure gives a list of beats
-(let* ((measures (transpose falls-of-richmond))
-       (beats (transpose (first measures)))
-       (half-beats (transpose (first beats))))
-   (first half-beats))
+;(let* ((measures (transpose falls-of-richmond))
+;       (beats (transpose (first measures)))
+;       (half-beats (transpose (first beats))))
+;   (first half-beats))
+
+;; The first step to rendering is to convert from a
+;; transposed matrix to a box layout model.
+
+;; Boxes have a width, height, type, and contents.
+;; The type of box determines how it arranges its
+;; children.
 
 (defstruct box
   type
@@ -43,40 +71,61 @@
   width
   contents)
 
+;; hbox - a horizontal box.
 (defun hbox (boxes)
   (make-box :type :hbox
 	    :width (apply #'+ (mapcar #'box-width boxes))
 	    :height (apply #'max (mapcar #'box-height boxes))
 	    :contents boxes))
 
+;; vbox - a vertical box
 (defun vbox (boxes)
   (make-box :type :vbox
 	    :width (apply #'max (mapcar #'box-width boxes))
 	    :height (apply #'+ (mapcar #'box-height boxes))
 	    :contents boxes))
 
-(defun text (string)
+;; text - a box holding text
+(defun text-box (string)
   (make-box :type :text
 	    :width 1
 	    :height 1
 	    :contents string))
 
+;; staff - renders a staff line
 (defun staff (content)
   (make-box :type :staff
 	    :width (box-width content)
 	    :height (box-height content)
 	    :contents content))
 
+;; layout - convert a (transposed) tab matrix into boxes
+;; Recursively convert a matrix into a nested set of
+;; boxes. Matrices are converted to horizontal boxes.
+;; When we get to the level of a list, it is converted
+;; into a vertical list of text boxes.
+
 (defun layout (tab)
   (if (matrixp tab)
       (hbox (mapcar #'layout tab))
-      (vbox (mapcar #'text tab))))
+      (vbox (mapcar #'text-box tab))))
 
+;; Layout a staff by constructing a staff box that contains
+;; a set of horizontal and vertical boxes.
 (defun layout-staff (tab)
   (staff (layout tab)))
-	    
 
-;;(layout (transpose falls-of-richmond))
+
+;; Graphic objects
+
+;; Boxes are rendered to a scene graph of drawing objects.
+
+(defstruct line (x1 y1 x2 y2))
+
+(defstruct text (x y string))
+
+
+;; Rendering
 
 (defstruct rect top left width height)
 
@@ -91,6 +140,8 @@
 
 (defun staff-box (staff)
   (hbox (mapcar #'measure-box staff)))
+
+
 
 (defun render-frontmatter ()
   (format *ps-output* "%!PS
