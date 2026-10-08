@@ -13,12 +13,18 @@
 ;; Four divisions are quarter notes, setc.
 
 ;; Falls of Richmond
-(defvar falls-of-richmond
-  '(( ( ( - - ) - - ( 0 - ) ) ( - ( - - ) ( - - - ) ( - - ) ) )
-    ( ( ( - - ) - - ( 0 - ) ) ( - ( - 2 ) ( - - - ) ( - - ) ) )
-    ( ( ( - - ) 0 0 ( - - ) ) ( - ( 0 - ) ( 3 2 0 ) ( - - ) ) )
-    ( ( ( 0 3 ) - - ( - - ) ) ( 3 ( - - ) ( - - - ) ( 3 0 ) ) )
-    ( ( ( - - ) - - ( - 0 ) ) ( - ( - - ) ( - - - ) ( - - ) ) )))
+(defparameter falls-of-richmond
+  '((( ( ( - - ) - - ( 0 - ) ) ( - ( - - ) ( - - - ) ( - - ) ) )
+     ( ( ( - - ) - - ( 0 - ) ) ( - ( - 2 ) ( - - - ) ( - - ) ) )
+     ( ( ( - - ) 0 0 ( - - ) ) ( - ( 0 - ) ( 3 2 0 ) ( - - ) ) )
+     ( ( ( 0 3 ) - - ( - - ) ) ( 3 ( - - ) ( - - - ) ( 3 0 ) ) )
+     ( ( ( - - ) - - ( - 0 ) ) ( - ( - - ) ( - - - ) ( - - ) ) ))
+    
+    (( ( ( - - ) - - ( 0 - ) ) ( - ( - - ) ( - - - ) ( - - ) ) )
+     ( ( ( - - ) - - ( 0 - ) ) ( - ( - 2 ) ( - - - ) ( - - ) ) )
+     ( ( ( - - ) 0 0 ( - - ) ) ( - ( 0 - ) ( 3 2 0 ) ( - - ) ) )
+     ( ( ( 0 3 ) - - ( - - ) ) ( 3 ( - - ) ( - - - ) ( 3 0 ) ) )
+     ( ( ( - - ) - - ( - 0 ) ) ( - ( - - ) ( - - - ) ( - - ) ) ))))
 
 ;; Rendering and layout is much easier if we transpose the matrix
 ;; so each note in a chord are aligned in a list.  Essentially we
@@ -48,8 +54,6 @@
 (defun transpose (tab)
   (if (not (matrixp tab)) tab
       (mapcar #'transpose (transpose-1 tab))))
-
-(transpose falls-of-richmond)
 
 ;; Transposing the staff gives us a list of measures
 ;; Transposing a measure gives a list of beats
@@ -117,7 +121,7 @@
 ;; Layout a staff by constructing a staff box that contains
 ;; a set of horizontal and vertical boxes.
 (defun layout-staff (tab)
-  (staff (layout tab)))
+  (staff (hbox (mapcar #'layout tab))))
 
 
 ;; Graphic objects
@@ -221,7 +225,11 @@
 
 (defun render-score ()
   (render-frontmatter)
-  (draw (render (layout-staff (transpose falls-of-richmond)) (page-rect)))
+  (draw
+   (render
+    (layout-staff
+     (mapcar #'transpose falls-of-richmond))
+    (page-rect)))
   (showpage))
 
 (defun main ()
