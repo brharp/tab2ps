@@ -1,4 +1,6 @@
 
+(require "ps" (merge-pathnames "ps" *load-pathname*))
+
 (defparameter *page-width* 612)
 (defparameter *page-height* 792)
 (defparameter *page-margin-left* 16)
@@ -103,6 +105,13 @@
 	    :height (box-height content)
 	    :contents content))
 
+;; measure - renders on measure
+(defun measure (contents)
+  (make-box :type :measure
+	    :width (box-width contents)
+	    :height (box-height contents)
+	    :contents contents))
+
 ;; layout - convert a (transposed) tab matrix into boxes
 ;; Recursively convert a matrix into a nested set of
 ;; boxes. Matrices are converted to horizontal boxes.
@@ -118,11 +127,18 @@
       (hbox (mapcar #'layout tab))
       (vbox (mapcar #'text-box tab))))
 
+;; Layout a measure by constructing a measure box that contains
+;; a list of layout boxes.
+(defun layout-measure (tab)
+  (measure (hbox (mapcar #'layout tab))))
+
 ;; Layout a staff by constructing a staff box that contains
 ;; a set of horizontal and vertical boxes.
 (defun layout-staff (tab)
-  (staff (hbox (mapcar #'layout tab))))
+  (staff (hbox (mapcar #'layout-measure tab))))
 
+(defun layout-score (tab)
+  (vbox (list (layout-staff tab))))
 
 ;; Graphic objects
 
@@ -139,6 +155,9 @@
 ;; with a rect into which they can render.
 
 (defstruct rect top left width height)
+
+(defun rect-right (r) (+ (rect-left r) (rect-width r)))
+(defun rect-bottom (r) (- (rect-top r) (rect-height r)))
 
 ;; rect-with - copy rect and modify attributes
 (defun rect-with (r &key top left width height)
@@ -196,13 +215,21 @@
 	     (x2 (+ x1 (rect-width r)))
 	     (y  (- (rect-top r) (* 16 i))))
 	(push (make-line :x1 x1 :y1 y :x2 x2 :y2 y) g)))
-    (reverse (cons (render (box-contents box) r) g))))
+    (cons (render (box-contents box) r) g)))
+
+(defun render-measure (box r)
+  (let ((right (rect-right r))
+	(top (rect-top r))
+	(bottom (rect-bottom r)))
+    (cons (make-line :y1 top :x1 right :y2 bottom :x2 right)
+	  (render (box-contents box) r))))
 
 (defun render (box r)
   (case (box-type box)
     (:hbox (render-hbox box r))
     (:vbox (render-vbox box r))
     (:text (render-text box r))
+    (:measure (render-measure box r))
     (:staff (render-staff box r))))
 
 (defun page-rect ()
@@ -227,7 +254,7 @@
   (render-frontmatter)
   (draw
    (render
-    (layout-staff
+    (layout-score
      (mapcar #'transpose falls-of-richmond))
     (page-rect)))
   (showpage))
@@ -236,6 +263,5 @@
   (with-ps (render-score)
     (y-or-n-p))
   t)
-
 
 ;;
